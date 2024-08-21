@@ -1,0 +1,1193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nmap Scan Report Visualizer</title>
+    <style>
+        body {
+            font-family: "Courier New", Courier, monospace;
+            background-color: #0a0a0a;
+            color: #00ff99;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            width: 80%;
+            margin: 0 auto;
+            background-color: #111;
+            padding: 20px;
+            margin-top: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(0,255,150,0.2);
+        }
+        h1, h2 {
+            text-align: center;
+            color: #00ff99;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            color: #00ff99;
+        }
+        table, th, td {
+            border: 1px solid #00ff99;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #0d0d0d;
+            color: #00ff99;
+            cursor: pointer;
+        }
+        tr:nth-child(even) {
+            background-color: #0d0d0d;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            margin: 8px 0;
+            box-sizing: border-box;
+            background-color: #0d0d0d;
+            color: #00ff99;
+            border: 1px solid #00ff99;
+        }
+        .tabs {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        .tab {
+            padding: 10px 20px;
+            background-color: #0d0d0d;
+            color: #00ff99;
+            border: 1px solid #00ff99;
+            cursor: pointer;
+            margin: 0 5px;
+            border-radius: 5px;
+        }
+        .tab.active {
+            background-color: #00ff99;
+            color: #0d0d0d;
+        }
+        .download-btn {
+            display: block;
+            margin: 0 auto 20px;
+            padding: 10px 20px;
+            background-color: #00ff99;
+            color: #0d0d0d;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+            text-align: center;
+        }
+        .charts {
+            display: flex;
+            align-self: auto;
+            justify-content: space-around;
+            margin-top: 20px;
+        }
+        .chart-container {
+            width: 45%;
+        }
+        .records-selector {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .drag-and-drop-area {
+            border: 2px dashed #00ff99;
+            padding: 20px;
+            text-align: center;
+            color: #00ff99;
+            margin-bottom: 20px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>ROBENSIVE</h2>
+        <h1>Nmap Scan Report Visualizer</h1>
+        <div id="drag-and-drop-area" class="drag-and-drop-area">Drag and drop a XML file or XMLs.zip file here</div>
+
+        <div class="tabs">
+            <button id="overviewTab" class="tab active">Overview</button>
+            <button id="serviceTab" class="tab">Services</button>
+            <button id="top10Tab" class="tab">Top 10</button>
+        </div>
+
+        <input type="text" id="searchInput" placeholder="Search..." oninput="searchTable()" />
+
+        <div class="records-selector">
+            <label for="recordsLimit">Records to display: </label>
+            <select id="recordsLimit">
+                <option value="10">10</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+                <option value="all">All</option>
+            </select>
+        </div>
+
+        <h2 id="tableTitle">Overview View</h2>
+        <p>Number of Hosts: <span id="hostCount">0</span></p>
+
+        <table id="nmap-table">
+            <thead>
+                <tr id="table-headers">
+                    <th onclick="sortTable(0)">IP Address</th>
+                    <th onclick="sortTable(1)">Hostname</th>
+                    <th onclick="sortTable(2)">Ports</th>
+                    <th onclick="sortTable(3)">Operating System</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Dynamic data will be inserted here -->
+            </tbody>
+        </table>
+
+        <button id="download-btn" class="download-btn">Download CSV</button>
+        <div class="toggle-container">
+            <label for="tcpUdpToggle">Select Protocol:</label>
+            <input type="radio" id="tcpToggle" name="protocolToggle" value="tcp" checked>
+            <label for="tcpToggle">TCP</label>
+            <input type="radio" id="udpToggle" name="protocolToggle" value="udp">
+            <label for="udpToggle">UDP</label>
+        </div>
+        
+
+        <div class="charts">
+            <div class="chart-container">
+                <h2>Port Distribution</h2>
+                <canvas id="portChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <h2>OS Distribution</h2>
+                <canvas id="osChart"></canvas>
+            </div>
+        </div>
+        <div id="top10ChartContainer" class="charts" style="display: none;">
+            <div class="chart-container">
+                <h2>Top 10 Ports</h2>
+                <canvas id="top10PortsChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <h2>Top 10 Services</h2>
+                <canvas id="top10ServicesChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <h2>Top 10 Operating Systems</h2>
+                <canvas id="top10OSChart"></canvas>
+            </div>
+        </div>
+        
+        
+        <div id="serviceChartContainer" class="chart-container" style="display: none;">
+            <h2>Service Distribution</h2>
+            <canvas id="serviceChart"></canvas>
+        </div>
+        
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        let currentXmlDocs = [];
+        let currentView = "overview";
+        let rowsPerPage = 10;
+        let allRows = [];
+        let top10PortsChartInstance = null;
+        let top10ServicesChartInstance = null;
+        let top10OSChartInstance = null;
+        let portChartInstance = null;
+        let osChartInstance = null;
+        let serviceChartInstance = null;
+
+
+
+
+
+        // Drag-and-drop area functionality
+        const dragAndDropArea = document.getElementById('drag-and-drop-area');
+
+        dragAndDropArea.addEventListener('click', () => {
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = '.zip';
+            fileInput.click();
+            fileInput.onchange = handleFile;
+        });
+
+        dragAndDropArea.addEventListener('dragover', (event) => {
+            event.preventDefault();
+            dragAndDropArea.style.backgroundColor = '#0d0d0d';
+        });
+
+        dragAndDropArea.addEventListener('dragleave', (event) => {
+            dragAndDropArea.style.backgroundColor = 'transparent';
+        });
+
+        dragAndDropArea.addEventListener('drop', (event) => {
+            event.preventDefault();
+            dragAndDropArea.style.backgroundColor = 'transparent';
+            handleFile(event.dataTransfer);
+        });
+
+        function handleFile(event) {
+            const file = event.files[0];
+            const fileType = file.name.split('.').pop().toLowerCase();
+        
+            if (fileType === 'zip') {
+                JSZip.loadAsync(file).then(function(zip) {
+                    const xmlPromises = [];
+        
+                    zip.forEach(function(relativePath, zipEntry) {
+                        if (zipEntry.name.endsWith('.xml')) {
+                            xmlPromises.push(zipEntry.async("string").then(function(content) {
+                                const parser = new DOMParser();
+                                return parser.parseFromString(content, "text/xml");
+                            }));
+                        }
+                    });
+        
+                    Promise.all(xmlPromises).then(function(parsedXmlDocs) {
+                        currentXmlDocs = parsedXmlDocs;
+                        populateOverviewView(currentXmlDocs);
+                        updateCharts(currentXmlDocs);
+                    });
+                }).catch(function(err) {
+                    showError("Error reading zip file.");
+                    console.error("Error reading zip file:", err);
+                });
+            } else if (fileType === 'xml') {
+                file.text().then(function(content) {
+                    const parser = new DOMParser();
+                    const parsedXml = parser.parseFromString(content, "text/xml");
+                    currentXmlDocs = [parsedXml];
+                    populateOverviewView(currentXmlDocs);
+                    updateCharts(currentXmlDocs);
+                }).catch(function(err) {
+                    showError("Error reading XML file.");
+                    console.error("Error reading XML file:", err);
+                });
+            } else {
+                showError("Unsupported file type. Please upload a ZIP or XML file.");
+            }
+        }
+        
+        function showError(message) {
+            alert(message);  // You can customize this to show error messages in your UI
+        }
+
+        document.getElementById('recordsLimit').addEventListener('change', function() {
+            const selectedValue = this.value;
+            rowsPerPage = selectedValue === "all" ? -1 : parseInt(selectedValue);
+            if (currentView === "overview") {
+                populateOverviewView(currentXmlDocs);
+            } else {
+                populateServiceView(currentXmlDocs);
+            }
+        });
+
+        function searchTable() {
+            const input = document.getElementById('searchInput').value.toLowerCase();
+            const tbody = document.querySelector('#nmap-table tbody');
+            tbody.innerHTML = ''; // Clear the table
+        
+            // Filter through allRows for the search input
+            const filteredRows = allRows.filter(rowData => {
+                return rowData.some(cell => cell.toLowerCase().includes(input));
+            });
+        
+            // Append filtered rows to the table, limited by rowsPerPage
+            let displayedRowsCount = 0;
+            filteredRows.forEach(rowData => {
+                if (rowsPerPage === -1 || displayedRowsCount < rowsPerPage) {
+                    const row = document.createElement('tr');
+                    rowData.forEach(cellData => {
+                        const td = document.createElement('td');
+                        td.textContent = cellData;
+                        row.appendChild(td);
+                    });
+                    tbody.appendChild(row);
+                    displayedRowsCount++;
+                }
+            });
+        }
+        
+        
+
+        function populateOverviewView(xmlDocs) {
+            const tbody = document.querySelector('#nmap-table tbody');
+            tbody.innerHTML = '';  // Clear previous data
+            allRows = []; // Reset allRows
+        
+            let rowCount = 0;
+            let hostCount = 0;
+        
+            xmlDocs.forEach(xmlDoc => {
+                const hosts = xmlDoc.getElementsByTagName('host');
+                hostCount += hosts.length;
+        
+                Array.from(hosts).forEach((host) => {
+                    const ipAddress = host.querySelector('address').getAttribute('addr');
+                    const hostname = host.querySelector('hostname') ? host.querySelector('hostname').getAttribute('name') : 'N/A';
+                    const ports = Array.from(host.querySelectorAll('port')).map(port => `${port.getAttribute('portid')}/${port.getAttribute('protocol')}`).join(', ');
+        
+                    let mostAccurateOs = "Unknown";
+                    let highestAccuracy = 0;
+        
+                    const osMatches = host.getElementsByTagName('osmatch');
+                    Array.from(osMatches).forEach(osmatch => {
+                        const accuracy = parseInt(osmatch.getAttribute('accuracy'));
+                        if (accuracy > highestAccuracy) {
+                            mostAccurateOs = osmatch.getAttribute('name');
+                            highestAccuracy = accuracy;
+                        }
+                    });
+        
+                    const rowData = [ipAddress, hostname, ports, mostAccurateOs];
+                    allRows.push(rowData); // Store row data in allRows
+        
+                    if (rowsPerPage !== -1 && rowCount >= rowsPerPage) return;
+                    rowCount++;
+                });
+            });
+        
+            document.getElementById("hostCount").textContent = hostCount;
+            searchTable();  // Call search function to ensure visibility of rows
+        }
+        
+        
+        
+        function populateServiceView(xmlDocs) {
+            const tbody = document.querySelector('#nmap-table tbody');
+            tbody.innerHTML = '';  // Clear previous data
+            allRows = []; // Reset allRows
+        
+            let rowCount = 0;
+        
+            xmlDocs.forEach(xmlDoc => {
+                const hosts = xmlDoc.getElementsByTagName('host');
+        
+                Array.from(hosts).forEach(host => {
+                    const ipAddress = host.querySelector('address').getAttribute('addr');
+                    const hostname = host.querySelector('hostname') ? host.querySelector('hostname').getAttribute('name') : 'N/A';
+        
+                    const ports = host.querySelectorAll('port');
+                    Array.from(ports).forEach(port => {
+                        const portId = port.getAttribute('portid');
+                        const protocol = port.getAttribute('protocol');
+                        const service = port.querySelector('service') ? port.querySelector('service').getAttribute('name') : 'N/A';
+                        const version = port.querySelector('service') && port.querySelector('service').getAttribute('version') ? port.querySelector('service').getAttribute('version') : 'N/A';
+                        const extraInfo = port.querySelector('service') && port.querySelector('service').getAttribute('extrainfo') ? port.querySelector('service').getAttribute('extrainfo') : 'N/A';
+        
+                        const rowData = [ipAddress, hostname, `${portId}/${protocol}`, service, version, extraInfo];
+                        allRows.push(rowData); // Store row data in allRows
+        
+                        if (rowsPerPage !== -1 && rowCount >= rowsPerPage) return;
+                        rowCount++;
+                    });
+                });
+            });
+        
+            searchTable();  // Call search function to ensure visibility of rows
+        }
+        
+        
+
+        document.getElementById('overviewTab').addEventListener('click', function() {
+            switchToOverviewView();
+        });
+
+        document.getElementById('top10Tab').addEventListener('click', function () {
+            switchToTop10View();
+        });
+        
+        
+
+        document.getElementById('serviceTab').addEventListener('click', function() {
+            switchToServiceView();
+        });
+
+        document.querySelectorAll('input[name="protocolToggle"]').forEach((toggle) => {
+            toggle.addEventListener('change', function() {
+                if (this.checked) {
+                    updateTop10PortsChart(this.value);  // Pass either 'tcp' or 'udp' depending on the selection
+                }
+            });
+        });
+        
+        function updateTop10PortsChart(protocol) {
+            // Ensure any existing chart is destroyed first
+            if (top10PortsChartInstance) {
+                top10PortsChartInstance.destroy();
+                top10PortsChartInstance = null;  // Set to null after destruction
+            }
+        
+            // Reset the canvas (Ensure the canvas is properly recreated)
+            resetCanvas('top10PortsChart');
+        
+            // Get the top 10 data for the selected protocol (TCP or UDP)
+            const top10Ports = getTop10PortsData(protocol);
+        
+            const ctx = document.getElementById('top10PortsChart').getContext('2d');
+        
+            // Define consistent chart colors
+            const chartColors = [
+                '#007bff', '#6610f2', '#6f42c1', '#e83e8c', '#dc3545', '#fd7e14', '#ffc107', '#28a745', '#20c997', '#17a2b8'
+            ];
+        
+            // Create the new chart with consistent colors
+            top10PortsChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: top10Ports.labels,
+                    datasets: [{
+                        data: top10Ports.data,
+                        backgroundColor: chartColors.slice(0, top10Ports.data.length),  // Apply colors to the data points
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.label}: ${context.raw}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        }
+        
+        function resetCanvas(canvasId) {
+            const canvas = document.getElementById(canvasId);
+            const canvasParent = canvas.parentNode;
+        
+            if (canvas) {
+                canvasParent.removeChild(canvas);  // Remove the existing canvas safely
+            }
+        
+            const newCanvas = document.createElement('canvas');  // Create a new canvas element
+            newCanvas.id = canvasId;  // Assign the same ID to the new canvas
+            canvasParent.appendChild(newCanvas);  // Append the new canvas to the parent
+        }
+        
+        
+        
+        
+        
+        function getTop10PortsData(protocol) {
+            const portCounts = {};
+        
+            currentXmlDocs.forEach(xmlDoc => {
+                const hosts = xmlDoc.getElementsByTagName('host');
+                Array.from(hosts).forEach(host => {
+                    const ports = host.getElementsByTagName('port');
+                    Array.from(ports).forEach(port => {
+                        const portProtocol = port.getAttribute('protocol');
+                        if (portProtocol === protocol) {
+                            const portId = port.getAttribute('portid');
+                            if (portId) {
+                                portCounts[portId] = (portCounts[portId] || 0) + 1;
+                            }
+                        }
+                    });
+                });
+            });
+        
+            return getTop10(portCounts);
+        }
+        
+
+        function updateTop10Charts(xmlDocs) {
+            const chartColors = [
+                '#007bff', '#6610f2', '#6f42c1', '#e83e8c', '#dc3545', '#fd7e14', '#ffc107', '#28a745', '#20c997', '#17a2b8'
+            ];
+        
+            // Gather data for top 10 charts
+            const portCounts = {};
+            const serviceCounts = {};
+            const osCounts = {};
+        
+            xmlDocs.forEach(xmlDoc => {
+                const hosts = xmlDoc.getElementsByTagName('host');
+                Array.from(hosts).forEach(host => {
+                    const ports = host.getElementsByTagName('port');
+                    const osElements = host.getElementsByTagName('osmatch');
+        
+                    // Count ports
+                    Array.from(ports).forEach(port => {
+                        const portId = port.getAttribute('portid');
+                        if (portId) {
+                            portCounts[portId] = (portCounts[portId] || 0) + 1;
+                        }
+        
+                        // Count services
+                        const serviceName = port.querySelector('service') ? port.querySelector('service').getAttribute('name') : 'Unknown';
+                        if (serviceName) {
+                            serviceCounts[serviceName] = (serviceCounts[serviceName] || 0) + 1;
+                        }
+                    });
+        
+                    // Count OS
+                    let mostAccurateOs = "Unknown";
+                    let highestAccuracy = 0;
+        
+                    Array.from(osElements).forEach(osElement => {
+                        const accuracy = parseInt(osElement.getAttribute('accuracy'));
+                        const osName = osElement.getAttribute('name');
+                        if (accuracy > highestAccuracy && osName) {
+                            mostAccurateOs = osName;
+                            highestAccuracy = accuracy;
+                        }
+                    });
+        
+                    osCounts[mostAccurateOs] = (osCounts[mostAccurateOs] || 0) + 1;
+                });
+            });
+        
+            // Prepare the top 10 data
+            const top10Ports = getTop10(portCounts);
+            const top10Services = getTop10(serviceCounts);
+            const top10OS = getTop10(osCounts);
+        
+            // Reset and recreate each canvas and chart for top 10 Ports, Services, and OS
+        
+            // Ports
+            if (top10PortsChartInstance) {
+                top10PortsChartInstance.destroy();
+            }
+            resetCanvas('top10PortsChart');
+            const portsCtx = document.getElementById('top10PortsChart').getContext('2d');
+            top10PortsChartInstance = new Chart(portsCtx, {
+                type: 'bar',
+                data: {
+                    labels: top10Ports.labels,
+                    datasets: [{
+                        data: top10Ports.data,
+                        backgroundColor: chartColors,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.raw || '';
+                                    return `${label}: ${value}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        
+            // Services
+            if (top10ServicesChartInstance) {
+                top10ServicesChartInstance.destroy();
+            }
+            resetCanvas('top10ServicesChart');
+            const servicesCtx = document.getElementById('top10ServicesChart').getContext('2d');
+            top10ServicesChartInstance = new Chart(servicesCtx, {
+                type: 'bar',
+                data: {
+                    labels: top10Services.labels,
+                    datasets: [{
+                        data: top10Services.data,
+                        backgroundColor: chartColors,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.raw || '';
+                                    return `${label}: ${value}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        
+            // OS
+            if (top10OSChartInstance) {
+                top10OSChartInstance.destroy();
+            }
+            resetCanvas('top10OSChart');
+            const osCtx = document.getElementById('top10OSChart').getContext('2d');
+            top10OSChartInstance = new Chart(osCtx, {
+                type: 'bar',
+                data: {
+                    labels: top10OS.labels,
+                    datasets: [{
+                        data: top10OS.data,
+                        backgroundColor: chartColors,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.raw || '';
+                                    return `${label}: ${value}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        }
+        
+        
+
+        function getTop10PortCounts(protocol) {
+            const portCounts = {};
+        
+            // Iterate through the XML documents and gather port counts based on the selected protocol
+            currentXmlDocs.forEach(xmlDoc => {
+                const hosts = xmlDoc.getElementsByTagName('host');
+        
+                Array.from(hosts).forEach(host => {
+                    const ports = host.getElementsByTagName('port');
+        
+                    Array.from(ports).forEach(port => {
+                        const portId = port.getAttribute('portid');
+                        const protocolAttr = port.getAttribute('protocol');
+        
+                        if (protocolAttr === protocol) {
+                            portCounts[portId] = (portCounts[portId] || 0) + 1;
+                        }
+                    });
+                });
+            });
+        
+            // Get top 10 ports based on the counts
+            const sortedPorts = Object.entries(portCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+            return {
+                labels: sortedPorts.map(entry => entry[0]),
+                data: sortedPorts.map(entry => entry[1])
+            };
+        }
+        
+        
+        
+
+        function switchToTop10View() {
+            currentView = "top10";
+        
+            // Hide search bar, records selector, and download CSV button for Top 10 view
+            document.getElementById('searchInput').style.display = 'none';
+            document.querySelector('.records-selector').style.display = 'none';
+            document.getElementById('download-btn').style.display = 'none';
+            document.getElementById('hostCount').style.display = 'none';
+        
+            // Hide other charts and tables
+            document.querySelector('.charts').style.display = 'none'; // Hide the overview charts
+            document.getElementById('serviceChartContainer').style.display = 'none'; // Hide the service chart container
+            document.getElementById('nmap-table').style.display = 'none'; // Hide the table
+        
+            // Show the top 10 chart container
+            document.getElementById('top10ChartContainer').style.display = 'flex'; // Show the top 10 chart container
+        
+            // Update the active tab state
+            document.getElementById('overviewTab').classList.remove('active');
+            document.getElementById('serviceTab').classList.remove('active');
+            document.getElementById('top10Tab').classList.add('active');
+        
+            // Update title
+            document.getElementById('tableTitle').textContent = "Top 10";
+        
+            // Update top 10 charts for Ports, Services, OS
+            updateTop10Charts(currentXmlDocs);
+        }
+        
+        function getOSCounts(xmlDocs) {
+            const osCounts = {};
+        
+            xmlDocs.forEach(xmlDoc => {
+                const hosts = xmlDoc.getElementsByTagName('host');
+        
+                Array.from(hosts).forEach(host => {
+                    const osElements = host.getElementsByTagName('osmatch');
+        
+                    // Count OS
+                    let mostAccurateOs = "Unknown";
+                    let highestAccuracy = 0;
+        
+                    Array.from(osElements).forEach(osElement => {
+                        const accuracy = parseInt(osElement.getAttribute('accuracy'));
+                        const osName = osElement.getAttribute('name');
+                        if (accuracy > highestAccuracy && osName) {
+                            mostAccurateOs = osName;
+                            highestAccuracy = accuracy;
+                        }
+                    });
+        
+                    osCounts[mostAccurateOs] = (osCounts[mostAccurateOs] || 0) + 1;
+                });
+            });
+        
+            return osCounts;
+        }
+        
+        
+        
+        
+        // Modify switchToServiceView to fix table header and show the correct table structure
+        function switchToServiceView() {
+            // Ensure all top 10 charts are destroyed
+            if (top10PortsChartInstance) top10PortsChartInstance.destroy();
+            if (top10ServicesChartInstance) top10ServicesChartInstance.destroy();
+            if (top10OSChartInstance) top10OSChartInstance.destroy();
+        
+            // Show only the service charts
+            document.getElementById('searchInput').style.display = 'block';
+            document.querySelector('.records-selector').style.display = 'block';
+            document.getElementById('download-btn').style.display = 'block';        
+            document.querySelector('.charts').style.display = 'none';
+            document.getElementById('serviceChartContainer').style.display = 'block';
+            document.getElementById('top10ChartContainer').style.display = 'none';
+            document.getElementById('nmap-table').style.display = 'table';
+            document.getElementById('overviewTab').classList.remove('active');
+            document.getElementById('serviceTab').classList.add('active');
+            document.getElementById('top10Tab').classList.remove('active');
+        
+            // Reset chart instances and update Service charts
+           
+        
+            
+            // Ensure proper table headers for service view
+            document.getElementById('table-headers').innerHTML = `
+                <th onclick="sortTable(0)">IP Address</th>
+                <th onclick="sortTable(1)">Hostname</th>
+                <th onclick="sortTable(2)">Port</th>
+                <th onclick="sortTable(3)">Service</th>
+                <th onclick="sortTable(4)">Version</th>
+                <th onclick="sortTable(5)">Extra Information</th>
+            `;
+            
+            populateServiceView(currentXmlDocs); // Populate the service view
+            resetCanvas('serviceChart');
+            updateServiceChart(getServiceCounts(currentXmlDocs));
+        
+            document.getElementById('tableTitle').textContent = "Services";
+        }
+        
+        // Modify switchToOverviewView to ensure correct behavior when switching back to Overview
+        function switchToOverviewView() {
+            // Ensure all top 10 charts are destroyed
+            if (top10PortsChartInstance) top10PortsChartInstance.destroy();
+            if (top10ServicesChartInstance) top10ServicesChartInstance.destroy();
+            if (top10OSChartInstance) top10OSChartInstance.destroy();
+        
+            // Show only the overview charts
+            document.getElementById('searchInput').style.display = 'block';
+            document.querySelector('.records-selector').style.display = 'block';
+            document.getElementById('download-btn').style.display = 'block';
+        
+            document.querySelector('.charts').style.display = 'flex';
+            document.getElementById('serviceChartContainer').style.display = 'none';
+            document.getElementById('top10ChartContainer').style.display = 'none';
+            document.getElementById('nmap-table').style.display = 'table';
+            document.getElementById('overviewTab').classList.add('active');
+            document.getElementById('serviceTab').classList.remove('active');
+            document.getElementById('top10Tab').classList.remove('active');        
+            // Ensure proper table headers for overview
+            document.getElementById('table-headers').innerHTML = `
+                <th onclick="sortTable(0)">IP Address</th>
+                <th onclick="sortTable(1)">Hostname</th>
+                <th onclick="sortTable(2)">Ports</th>
+                <th onclick="sortTable(3)">Operating System</th>
+            `;
+            
+            populateOverviewView(currentXmlDocs); // Populate the overview view
+            resetCanvas('portChart');
+            resetCanvas('osChart');
+            updateCharts(currentXmlDocs);
+        
+            document.getElementById('tableTitle').textContent = "Overview";
+        }
+        function updateTop10Charts(xmlDocs) {
+            const chartColors = [
+                '#007bff', '#6610f2', '#6f42c1', '#e83e8c', '#dc3545', '#fd7e14', '#ffc107', '#28a745', '#20c997', '#17a2b8'
+            ];
+        
+            const top10Ports = getTop10PortsData('tcp');
+            const top10Services = getTop10(getServiceCounts(xmlDocs));
+            const top10OS = getTop10(getOSCounts(xmlDocs));
+        
+            // Create Top 10 Ports chart
+            const portsCtx = document.getElementById('top10PortsChart').getContext('2d');
+            top10PortsChartInstance = new Chart(portsCtx, {
+                type: 'bar',
+                data: {
+                    labels: top10Ports.labels,
+                    datasets: [{
+                        data: top10Ports.data,
+                        backgroundColor: chartColors.slice(0, top10Ports.data.length),
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: { beginAtZero: true }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.label}: ${context.raw}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        
+            // Create Top 10 Services chart
+            const servicesCtx = document.getElementById('top10ServicesChart').getContext('2d');
+            top10ServicesChartInstance = new Chart(servicesCtx, {
+                type: 'bar',
+                data: {
+                    labels: top10Services.labels,
+                    datasets: [{
+                        data: top10Services.data,
+                        backgroundColor: chartColors.slice(0, top10Services.data.length),
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: { beginAtZero: true }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.label}: ${context.raw}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        
+            // Create Top 10 OS chart
+            const osCtx = document.getElementById('top10OSChart').getContext('2d');
+            top10OSChartInstance = new Chart(osCtx, {
+                type: 'bar',
+                data: {
+                    labels: top10OS.labels,
+                    datasets: [{
+                        data: top10OS.data,
+                        backgroundColor: chartColors.slice(0, top10OS.data.length),
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: { beginAtZero: true }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.label}: ${context.raw}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        
+        
+        function getTop10(counts) {
+            const sortedEntries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+            const top10Entries = sortedEntries.slice(0, 10);
+            return {
+                labels: top10Entries.map(entry => entry[0]),
+                data: top10Entries.map(entry => entry[1])
+            };
+        }
+        
+        
+        function createBarChart(chartId, dataCounts, label) {
+            const labels = Object.keys(dataCounts);
+            const data = Object.values(dataCounts);
+        
+            const ctx = document.getElementById(chartId).getContext('2d');
+        
+            return new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: label,
+                        data: data,
+                        backgroundColor: '#007bff',
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function (context) {
+                                    return `${context.label}: ${context.raw}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        
+        function getServiceCounts(xmlDocs) {
+            const serviceCounts = {};
+            xmlDocs.forEach(xmlDoc => {
+                const hosts = xmlDoc.getElementsByTagName('host');
+                Array.from(hosts).forEach(host => {
+                    const ports = host.querySelectorAll('port');
+                    Array.from(ports).forEach(port => {
+                        const service = port.querySelector('service') ? port.querySelector('service').getAttribute('name') : 'N/A';
+                        if (service !== 'N/A') {
+                            serviceCounts[service] = (serviceCounts[service] || 0) + 1;
+                        }
+                    });
+                });
+            });
+            return serviceCounts;
+        }
+        
+
+        function sortTable(n) {
+            const table = document.getElementById("nmap-table");
+            let rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
+            switching = true;
+            dir = "asc"; 
+            while (switching) {
+                switching = false;
+                rows = table.rows;
+                for (i = 1; i < (rows.length - 1); i++) {
+                    shouldSwitch = false;
+                    x = rows[i].getElementsByTagName("TD")[n];
+                    y = rows[i + 1].getElementsByTagName("TD")[n];
+                    if (dir == "asc") {
+                        if (x.innerHTML.toLowerCase() > y.innerHTML.toLowerCase()) {
+                            shouldSwitch = true;
+                            break;
+                        }
+                    } else if (dir == "desc") {
+                        if (x.innerHTML.toLowerCase() < y.innerHTML.toLowerCase()) {
+                            shouldSwitch = true;
+                            break;
+                        }
+                    }
+                }
+                if (shouldSwitch) {
+                    rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
+                    switching = true;
+                    switchcount++;
+                } else {
+                    if (switchcount == 0 && dir == "asc") {
+                        dir = "desc";
+                        switching = true;
+                    }
+                }
+            }
+        }
+
+        function updateCharts(xmlDocs) {
+    const portCounts = {};
+    const osCounts = {};
+
+    xmlDocs.forEach(xmlDoc => {
+        const hosts = xmlDoc.getElementsByTagName('host');
+
+        Array.from(hosts).forEach(host => {
+            const ports = host.getElementsByTagName('port');
+            const osElements = host.getElementsByTagName('osmatch');
+
+            // Count ports
+            Array.from(ports).forEach(port => {
+                const portId = port.getAttribute('portid');
+                if (portId) {
+                    const portKey = `${portId}/tcp`;  // Assuming TCP for simplicity, modify as needed
+                    portCounts[portKey] = (portCounts[portKey] || 0) + 1;
+                }
+            });
+
+            // Select most accurate OS for pie chart
+            let mostAccurateOs = "Unknown";
+            let highestAccuracy = 0;
+
+            Array.from(osElements).forEach(osElement => {
+                const accuracy = parseInt(osElement.getAttribute('accuracy'));
+                const osName = osElement.getAttribute('name');
+                if (accuracy > highestAccuracy && osName) {
+                    mostAccurateOs = osName;
+                    highestAccuracy = accuracy;
+                }
+            });
+
+            osCounts[mostAccurateOs] = (osCounts[mostAccurateOs] || 0) + 1;
+        });
+    });
+
+    // Destroy existing charts to avoid overlapping data
+    if (portChartInstance) {
+        portChartInstance.destroy();
+    }
+    if (osChartInstance) {
+        osChartInstance.destroy();
+    }
+
+    // Create the charts with updated counts
+    portChartInstance = createPieChart('portChart', portCounts);
+    osChartInstance = createPieChart('osChart', osCounts);
+}
+
+function updateServiceChart(serviceCounts) {
+    if (serviceChartInstance) {
+        serviceChartInstance.destroy();
+    }
+
+    const labels = Object.keys(serviceCounts);
+    const data = Object.values(serviceCounts);
+
+    const ctx = document.getElementById('serviceChart').getContext('2d');
+    serviceChartInstance = new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: data,
+                backgroundColor: [
+                    '#007bff', '#6610f2', '#6f42c1', '#e83e8c', '#dc3545', '#fd7e14', '#ffc107', '#28a745', '#20c997', '#17a2b8'
+                ],
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'top',
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.raw || '';
+                            return `${label}: ${value}`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+        function createPieChart(chartId, dataCounts) {
+            const labels = Object.keys(dataCounts);
+            const data = Object.values(dataCounts);
+
+            const ctx = document.getElementById(chartId).getContext('2d');
+
+            return new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: [
+                            '#007bff', '#6610f2', '#6f42c1', '#e83e8c', '#dc3545', '#fd7e14', '#ffc107', '#28a745', '#20c997', '#17a2b8'
+                        ],
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.raw || '';
+                                    return `${label}: ${value}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        document.getElementById('download-btn').addEventListener('click', function() {
+            const table = document.getElementById('nmap-table');
+            const rows = Array.from(table.rows);
+            let csvContent = "";
+
+            rows.forEach(row => {
+                const cells = Array.from(row.cells).map(cell => `"${cell.textContent.replace(/"/g, '""')}"`);
+                csvContent += cells.join(",") + "\n";
+            });
+
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${currentView}-view.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+    </script>
+</body>
+</html>
